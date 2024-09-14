@@ -39,11 +39,10 @@ RUN apt remove -y cmdtest \
     && echo 'deb https://dl.yarnpkg.com/debian/ stable main' |tee /etc/apt/sources.list.d/yarn.list \
     && apt-get update \
     && apt-get install yarn -y \
-    && yarn install \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get install -y nodejs && \
-    npm install -g yarn && \
-    npm install -g retire
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g retire \
+    && npm install -g yarn --force
 
 # Install Google Chrome the New Way (Not via apt-key)
 RUN wget -qO - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg \
