@@ -210,14 +210,41 @@ def startSpiderFootScanner(scanId, scanName, scanTarget, targetType, moduleList,
         raise ValueError("globalOpts is empty")
     
     sf = SpiderFoot(globalOpts)
-    sf.dbh = SpiderFootDb(globalOpts)
+    dbh = SpiderFootDb(globalOpts)
+    sf.dbh = dbh
     sf.scanId = scanId
     sf.targetValue = scanTarget
     sf.targetType = targetType
     
-    # 运行扫描模块
-    for module in moduleList:
-        sf.runModule(module)
+    # 创建扫描实例
+    dbh.scanInstanceCreate(scanId, scanName, scanTarget)
+    
+    # 初始化模块
+    modlist = list()
+    for modName in moduleList:
+        if modName not in sf.opts['__modules__']:
+            continue
+        module = __import__('modules.' + modName, globals(), locals(), [modName])
+        mod = getattr(module, modName)()
+        mod.__name__ = modName
+        mod.setup(sf, sf.opts['__modules__'][modName]['opts'])
+        mod.setDbh(dbh)
+        mod.setScanId(scanId)
+        modlist.append(mod)
+    
+    # 开始扫描
+    sf.status(f"Scan [{scanId}] initiated")
+    for mod in modlist:
+        mod.start()
+    
+    # 等待所有模块完成
+    while True:
+        time.sleep(1)
+        scanStatus = dbh.scanInstanceGet(scanId)
+        if scanStatus[5] in ["FINISHED", "ABORTED", "ERROR-FAILED"]:
+            break
+    
+    sf.status(f"Scan [{scanId}] completed")
 
 @app.post("/stopscan/{id}", operation_id="stop_scan")
 def stop_scan(id: str = Path(..., description="扫描ID")):
@@ -385,6 +412,6 @@ def scan_correlations(id: str = Path(..., description="扫描ID")):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"数据库错误：{str(e)}")
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=7000)
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run(app, host="0.0.0.0", port=7000)
