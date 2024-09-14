@@ -9,11 +9,12 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
 from sflib import SpiderFoot
-from spiderfoot import SpiderFootDb, SpiderFootHelpers
+from spiderfoot import SpiderFootDb, SpiderFootHelpers, __version__
 from spiderfoot.db import SpiderFootDb
 import time
 import os
 from datetime import datetime, timedelta
+import multiprocessing as mp
 
 # 从环境变量获取服务器URL,如果未设置则使用默认值
 server_url = os.getenv("SPIDERFOOT_SERVER_URL", "http://localhost:7000")
@@ -48,9 +49,6 @@ class SearchResult(BaseModel):
 class ScanOptions(BaseModel):
     scanname: str
     scantarget: str
-    usecase: str
-    modulelist: Optional[str] = None
-    typelist: Optional[str] = None
 
 class ScanInstance(BaseModel):
     guid: str
@@ -74,8 +72,16 @@ def get_db():
     
     return SpiderFootDb({"__database": data_path})
 
+# 在文件顶部添加导入
+from spiderfoot import SpiderFootHelpers
+
+# 修改 get_sf 函数以确保它返回带有正确 opts 的 SpiderFoot 实例
 def get_sf():
-    return SpiderFoot(dict())
+    opts = {
+        '__database': os.getenv("SPIDERFOOT_DB_PATH", os.path.join(os.path.expanduser("~"), ".spiderfoot", "spiderfoot.db")),
+        # 添加其他必要的选项
+    }
+    return SpiderFoot(opts)
 
 # 应用启动事件
 @app.on_event("startup")
@@ -118,7 +124,7 @@ def modules():
 @app.get("/ping", operation_id="ping_server")
 def ping():
     """用于CLI测试与此服务器的连接。"""
-    return ["SUCCESS", SpiderFoot.__version__]
+    return ["SUCCESS", __version__]
 
 @app.get("/scanstatus/{id}", operation_id="get_scan_status")
 def scan_status(id: str = Path(..., description="扫描ID")):
@@ -176,7 +182,6 @@ def scan_event_results(
 
 @app.post("/startscan", operation_id="start_new_scan")
 def start_scan(scan_options: ScanOptions):
-    """启动一个扫描。"""
     sf = get_sf()
     dbh = get_db()
     
@@ -187,13 +192,32 @@ def start_scan(scan_options: ScanOptions):
         sf.targetValue = scan_options.scantarget
         sf.targetType = SpiderFootHelpers.targetTypeFromString(scan_options.scantarget)
         
-        # Start the scan
-        # Note: This is a simplified version. You might need to adjust this based on your actual implementation
-        sf.start()
+        # 创建扫描实例
+        dbh.scanInstanceCreate(scanId, scan_options.scanname, scan_options.scantarget)
+        
+        # 启动扫描
+        p = mp.Process(target=startSpiderFootScanner, args=(scanId, scan_options.scanname, scan_options.scantarget, sf.targetType, [], sf.opts))
+        p.daemon = True
+        p.start()
         
         return {"scanId": scanId}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+def startSpiderFootScanner(scanId, scanName, scanTarget, targetType, moduleList, globalOpts):
+    # 确保 globalOpts 不为空
+    if not globalOpts:
+        raise ValueError("globalOpts is empty")
+    
+    sf = SpiderFoot(globalOpts)
+    sf.dbh = SpiderFootDb(globalOpts)
+    sf.scanId = scanId
+    sf.targetValue = scanTarget
+    sf.targetType = targetType
+    
+    # 运行扫描模块
+    for module in moduleList:
+        sf.runModule(module)
 
 @app.post("/stopscan/{id}", operation_id="stop_scan")
 def stop_scan(id: str = Path(..., description="扫描ID")):
@@ -229,7 +253,7 @@ def scan_history(id: str = Path(..., description="扫描ID")):
         scan_info = dbh.scanInstanceGet(id)
         if not scan_info:
             raise ValueError("无法获取扫描信息")
-        scan_start_time = datetime.fromtimestamp(scan_info[3])  # 假设 scanInstanceGet 返回的第四个元素是开始时间
+        scan_start_time = datetime.fromtimestamp(scan_info[3])  # 假设 scanInstanceGet ���回的第四个元素是开始时间
         
         def format_relative_timestamp(ts, start_time):
             try:
