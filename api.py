@@ -1,3 +1,9 @@
+import os
+from dotenv import load_dotenv
+
+# 加载 .env 文件
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Query, Path, Body
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -82,9 +88,9 @@ async def startup_event():
         exit(1)
 
 # API端点
-@app.get("/scanlist", response_model=List[ScanInfo])
+@app.get("/scanlist", response_model=List[ScanInfo], operation_id="list_scans")
 def scan_list():
-    """List all previously run scans."""
+    """列出所有之前运行的扫描。"""
     try:
         dbh = get_db()
         scans = dbh.scanInstanceList()
@@ -92,9 +98,9 @@ def scan_list():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@app.get("/eventtypes", response_model=List[EventType])
+@app.get("/eventtypes", response_model=List[EventType], operation_id="list_event_types")
 def event_types():
-    """List all event types."""
+    """列出所有事件类型。"""
     try:
         dbh = get_db()
         types = dbh.eventTypes()
@@ -102,37 +108,37 @@ def event_types():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@app.get("/modules")
+@app.get("/modules", operation_id="list_modules")
 def modules():
-    """List all modules."""
+    """列出所有模块。"""
     sf = get_sf()
     modinfo = sf.modulesProducing([])
     return [{"name": m, "descr": sf.moduleDesc(m)} for m in modinfo]
 
-@app.get("/ping")
+@app.get("/ping", operation_id="ping_server")
 def ping():
-    """For the CLI to test connectivity to this server."""
+    """用于CLI测试与此服务器的连接。"""
     return ["SUCCESS", SpiderFoot.__version__]
 
-@app.get("/scanstatus/{id}")
-def scan_status(id: str = Path(..., description="Scan ID")):
-    """Get the status of a scan."""
+@app.get("/scanstatus/{id}", operation_id="get_scan_status")
+def scan_status(id: str = Path(..., description="扫描ID")):
+    """获取扫描的状态。"""
     try:
         dbh = get_db()
         return dbh.scanInstanceGet(id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@app.get("/scansummary/{id}")
-def scan_summary(id: str = Path(..., description="Scan ID"), by: str = Query("type", description="Group by type or module")):
-    """Summary of scan results."""
+@app.get("/scansummary/{id}", operation_id="get_scan_summary")
+def scan_summary(id: str = Path(..., description="扫描ID"), by: str = Query("type", description="按类型或模块分组")):
+    """扫描结果摘要。"""
     try:
         dbh = get_db()
         return dbh.scanResultSummary(id, by)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@app.get("/scaneventresults/{id}")
+@app.get("/scaneventresults/{id}", operation_id="get_scan_event_results")
 def scan_event_results(
     id: str = Path(..., description="扫描ID"),
     eventType: Optional[str] = Query(None, description="事件类型过滤"),
@@ -168,9 +174,9 @@ def scan_event_results(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"数据库错误：{str(e)}")
 
-@app.post("/startscan")
+@app.post("/startscan", operation_id="start_new_scan")
 def start_scan(scan_options: ScanOptions):
-    """Initiate a scan."""
+    """启动一个扫描。"""
     sf = get_sf()
     dbh = get_db()
     
@@ -189,9 +195,9 @@ def start_scan(scan_options: ScanOptions):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/stopscan/{id}")
-def stop_scan(id: str = Path(..., description="Scan ID")):
-    """Stop a scan."""
+@app.post("/stopscan/{id}", operation_id="stop_scan")
+def stop_scan(id: str = Path(..., description="扫描ID")):
+    """停止一个扫描。"""
     try:
         dbh = get_db()
         scan = dbh.scanInstanceGet(id)
@@ -202,9 +208,9 @@ def stop_scan(id: str = Path(..., description="Scan ID")):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/scandelete/{id}")
-def scan_delete(id: str = Path(..., description="Scan ID")):
-    """Delete a scan."""
+@app.delete("/scandelete/{id}", operation_id="delete_scan")
+def scan_delete(id: str = Path(..., description="扫描ID")):
+    """删除一个扫描。"""
     try:
         dbh = get_db()
         dbh.scanInstanceDelete(id)
@@ -212,7 +218,7 @@ def scan_delete(id: str = Path(..., description="Scan ID")):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/scanhistory/{id}")
+@app.get("/scanhistory/{id}", operation_id="get_scan_history")
 def scan_history(id: str = Path(..., description="扫描ID")):
     """获取扫描的历史数据。"""
     try:
@@ -251,13 +257,13 @@ def scan_history(id: str = Path(..., description="扫描ID")):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"数据库错误：{str(e)}")
 
-@app.get("/search/{id}")
+@app.get("/search/{id}", operation_id="search_scan_results")
 def search(
-    id: str = Path(..., description="Scan ID"),
-    eventType: Optional[str] = Query(None, description="Event type filter"),
-    value: Optional[str] = Query(None, description="Value to search for")
+    id: str = Path(..., description="扫描ID"),
+    eventType: Optional[str] = Query(None, description="事件类型过滤"),
+    value: Optional[str] = Query(None, description="要搜索的值")
 ):
-    """Search scan results."""
+    """搜索扫描结果。"""
     try:
         dbh = get_db()
         criteria = {"scan_id": id}
@@ -269,9 +275,9 @@ def search(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/scanconfig/{id}")
-def scan_config_set(id: str = Path(..., description="Scan ID"), config: Dict[str, Any] = Body(...)):
-    """Set configuration for a scan."""
+@app.post("/scanconfig/{id}", operation_id="set_scan_config")
+def scan_config_set(id: str = Path(..., description="扫描ID"), config: Dict[str, Any] = Body(...)):
+    """设置扫描的配置。"""
     try:
         dbh = get_db()
         dbh.scanConfigSet(id, config)
@@ -279,25 +285,25 @@ def scan_config_set(id: str = Path(..., description="Scan ID"), config: Dict[str
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/scanconfig/{id}")
-def scan_config_get(id: str = Path(..., description="Scan ID")):
-    """Get configuration for a scan."""
+@app.get("/scanconfig/{id}", operation_id="get_scan_config")
+def scan_config_get(id: str = Path(..., description="扫描ID")):
+    """获取扫描的配置。"""
     try:
         dbh = get_db()
         return dbh.scanConfigGet(id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/scanopts")
+@app.post("/scanopts", operation_id="get_scan_options")
 def scan_opts(id: str = Body(..., embed=True)):
-    """Return configuration used for a scan."""
+    """返回用于扫描的配置。"""
     try:
         dbh = get_db()
         return dbh.scanConfigGet(id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/scaneventresultsunique/{id}")
+@app.get("/scaneventresultsunique/{id}", operation_id="get_unique_scan_event_results")
 def scan_event_results_unique(
     id: str = Path(..., description="扫描ID"),
     eventType: str = Query(..., description="事件类型"),
@@ -319,6 +325,39 @@ def scan_event_results_unique(
         ]
         
         return {"results": formatted_results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"数据库错误：{str(e)}")
+
+@app.get("/scancorrelations/{id}", operation_id="get_scan_correlations")
+def scan_correlations(id: str = Path(..., description="扫描ID")):
+    """获取扫描的相关性结果。
+
+    Args:
+        id (str): 扫描ID
+
+    Returns:
+        dict: 包含相关性结果列表的字典
+    """
+    try:
+        dbh = get_db()
+        corr_data = dbh.scanCorrelationList(id)
+        
+        # 将原始结果转换为结构化的字典列表
+        formatted_results = [
+            {
+                "id": row[0],
+                "title": row[1],
+                "rule_id": row[2],
+                "rule_risk": row[3],
+                "rule_name": row[4],
+                "rule_description": row[5],
+                "rule_logic": row[6],
+                "event_count": row[7]
+            }
+            for row in corr_data
+        ]
+        
+        return {"correlations": formatted_results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"数据库错误：{str(e)}")
 
