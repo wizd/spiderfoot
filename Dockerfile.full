@@ -9,7 +9,7 @@
 FROM python:3
 
 # Install tools/dependencies from apt
-RUN apt-get -y update && apt-get -y install nbtscan onesixtyone nmap
+RUN apt-get -y update && apt-get -y install nbtscan onesixtyone nmap gosu
 
 # Compile other tools from source
 RUN mkdir /tools || true
@@ -71,18 +71,18 @@ ENV SPIDERFOOT_DATA /var/lib/spiderfoot
 ENV SPIDERFOOT_LOGS /var/lib/spiderfoot/log
 ENV SPIDERFOOT_CACHE /var/lib/spiderfoot/cache
 
-RUN mkdir -p $SPIDERFOOT_DATA || true \
-    && mkdir -p $SPIDERFOOT_LOGS || true \
-    && mkdir -p $SPIDERFOOT_CACHE || true \
-    && chown spiderfoot:spiderfoot $SPIDERFOOT_DATA \
-    && chown spiderfoot:spiderfoot $SPIDERFOOT_LOGS \
-    && chown spiderfoot:spiderfoot $SPIDERFOOT_CACHE
+RUN mkdir -p $SPIDERFOOT_DATA \
+    && mkdir -p $SPIDERFOOT_LOGS \
+    && mkdir -p $SPIDERFOOT_CACHE \
+    && chown -R spiderfoot:spiderfoot $SPIDERFOOT_DATA \
+    && chown -R spiderfoot:spiderfoot $SPIDERFOOT_LOGS \
+    && chown -R spiderfoot:spiderfoot $SPIDERFOOT_CACHE
 
 WORKDIR /home/spiderfoot
 COPY . .
 
 ENV VIRTUAL_ENV=/opt/venv
-RUN mkdir -p "$VIRTUAL_ENV" || true
+RUN mkdir -p "$VIRTUAL_ENV"
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN python -m venv "$VIRTUAL_ENV"
 
@@ -92,8 +92,7 @@ COPY "$REQUIREMENTS" requirements.txt
 RUN chown -R spiderfoot:spiderfoot /tools
 RUN chown -R spiderfoot:spiderfoot "$VIRTUAL_ENV"
 RUN chown -R spiderfoot:spiderfoot "/home/spiderfoot"
-
-USER spiderfoot
+RUN chmod +x /home/spiderfoot/sf.py
 
 RUN pip install -U pip
 RUN pip install -r "$REQUIREMENTS"
@@ -114,7 +113,7 @@ WORKDIR /home/spiderfoot
 EXPOSE 5001
 
 # Run the application
-CMD python -c 'from spiderfoot import SpiderFootDb; \
+CMD gosu root python -c 'from spiderfoot import SpiderFootDb; \
 db = SpiderFootDb({"__database": "/var/lib/spiderfoot/spiderfoot.db"}); \
 db.configSet({ \
     "sfp_tool_dnstwist:dnstwistpath": "/opt/venv/bin/dnstwist", \
@@ -131,4 +130,4 @@ db.configSet({ \
     "sfp_tool_wappalyzer:wappalyzer_path": "/tools/wappalyzer/src/drivers/npm/cli.js", \
     "sfp_tool_nbtscan:nbtscan_path": "/usr/bin/nbtscan", \
     "sfp_tool_nmap:nmappath": "DISABLED_BECAUSE_NMAP_REQUIRES_ROOT_TO_WORK" \
-})' || true && ./sf.py -l 0.0.0.0:5001
+})' && gosu spiderfoot ./sf.py -l 0.0.0.0:5001
