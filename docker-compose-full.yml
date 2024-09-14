@@ -5,6 +5,9 @@ services:
     build:
       context: ./
       dockerfile: ./Dockerfile.full
+    ports:
+      - 5001:5001
+      - 5002:5002 
     volumes:
       - ../files/spiderfoot-full-data:/var/lib/spiderfoot
 
