@@ -76,7 +76,10 @@ RUN mkdir -p $SPIDERFOOT_DATA \
     && mkdir -p $SPIDERFOOT_CACHE \
     && chown -R spiderfoot:spiderfoot $SPIDERFOOT_DATA \
     && chown -R spiderfoot:spiderfoot $SPIDERFOOT_LOGS \
-    && chown -R spiderfoot:spiderfoot $SPIDERFOOT_CACHE
+    && chown -R spiderfoot:spiderfoot $SPIDERFOOT_CACHE \
+    && chmod -R 755 $SPIDERFOOT_DATA \
+    && chmod -R 755 $SPIDERFOOT_LOGS \
+    && chmod -R 755 $SPIDERFOOT_CACHE
 
 WORKDIR /home/spiderfoot
 COPY . .
