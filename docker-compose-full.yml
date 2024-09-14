@@ -1,7 +1,9 @@
 version: "3"
 
 services:
-  spiderfoot:
+  spiderfoot-full:
     build:
       context: ./
       dockerfile: ./Dockerfile.full
+    volumes:
+      - ../files/spiderfoot-full-data:/var/lib/spiderfoot

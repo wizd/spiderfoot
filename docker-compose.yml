@@ -21,7 +21,7 @@ services:
     build:
       context: ./
     volumes:
-      - spiderfoot-data:/var/lib/spiderfoot
+      - ../files/spiderfoot-data:/var/lib/spiderfoot
     image: spiderfoot
     container_name: spiderfoot
     ports:
