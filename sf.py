@@ -35,6 +35,20 @@ from spiderfoot import SpiderFootCorrelator
 from spiderfoot.logger import logListenerSetup, logWorkerSetup
 from spiderfoot import __version__
 
+import uvicorn
+from fastapi import FastAPI
+from threading import Thread
+
+app = FastAPI()
+
+# FastAPI路由定义
+@app.get("/")
+async def root():
+    return {"message": "Welcome to SpiderFoot API"}
+
+def run_api():
+    uvicorn.run(app, host="127.0.0.1", port=5001)
+
 scanId = None
 dbh = None
 
@@ -215,6 +229,10 @@ def main() -> None:
         for t in sorted(types.keys()):
             print(f"{t.ljust(45)}  {types[t]}")
         sys.exit(0)
+
+    # 在新线程中启动FastAPI
+    api_thread = Thread(target=run_api)
+    api_thread.start()
 
     if args.l:
         try:

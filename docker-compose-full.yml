@@ -7,3 +7,6 @@ services:
       dockerfile: ./Dockerfile.full
     volumes:
       - ../files/spiderfoot-full-data:/var/lib/spiderfoot
+
+volumes:
+  spiderfoot-full-data:
