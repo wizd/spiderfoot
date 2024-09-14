@@ -50,9 +50,9 @@ RUN wget -qO - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor
     && apt -y update && apt install --allow-unauthenticated -y google-chrome-stable
 
 # Install Wappalyzer
-RUN git clone https://github.com/AliasIO/wappalyzer.git \
+RUN git clone https://github.com/dochne/wappalyzer.git \
     && cd wappalyzer \
-    && yarn install && yarn run link
+    && yarn install && yarn run lint
 
 # Install Nuclei
 RUN wget https://github.com/projectdiscovery/nuclei/releases/download/v2.6.5/nuclei_2.6.5_linux_amd64.zip \
