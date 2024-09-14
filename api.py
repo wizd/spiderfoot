@@ -7,8 +7,19 @@ from spiderfoot import SpiderFootDb, SpiderFootHelpers
 from spiderfoot.db import SpiderFootDb
 import time
 import os
+from datetime import datetime, timedelta
 
-app = FastAPI(title="SpiderFoot API", description="API for SpiderFoot OSINT tool")
+# 从环境变量获取服务器URL,如果未设置则使用默认值
+server_url = os.getenv("SPIDERFOOT_SERVER_URL", "http://localhost:7000")
+
+app = FastAPI(
+    title="SpiderFoot API", 
+    description="API for SpiderFoot OSINT tool",
+    version="1.0.0",
+    servers=[
+        {"url": server_url, "description": "SpiderFoot API Server"}
+    ]
+)
 
 # 数据模型
 class ScanInfo(BaseModel):
@@ -123,16 +134,39 @@ def scan_summary(id: str = Path(..., description="Scan ID"), by: str = Query("ty
 
 @app.get("/scaneventresults/{id}")
 def scan_event_results(
-    id: str = Path(..., description="Scan ID"),
-    eventType: Optional[str] = Query(None, description="Event type filter"),
-    filterfp: bool = Query(False, description="Filter false positives")
+    id: str = Path(..., description="扫描ID"),
+    eventType: Optional[str] = Query(None, description="事件类型过滤"),
+    filterfp: bool = Query(False, description="过滤误报")
 ):
-    """Get scan event results."""
+    """获取扫描事件结果。"""
     try:
         dbh = get_db()
-        return dbh.scanResultEvent(id, eventType, filterfp)
+        # 如果 eventType 为 None，则将其设置为 'ALL'
+        eventType = eventType or 'ALL'
+        raw_results = dbh.scanResultEvent(id, eventType, filterFp=filterfp)
+        
+        # 将原始结果转换为结构化的字典列表
+        formatted_results = [
+            {
+                "type": result[0],
+                "module": result[1],
+                "data": result[2],
+                "source_event": result[3],
+                "source_event_hash": result[4],
+                "confidence": result[5],
+                "visibility": result[6],
+                "risk": result[7],
+                "false_positive": result[8],
+                "last_seen": result[9],
+                "source_data": result[10],
+                "source_module": result[11]
+            }
+            for result in raw_results
+        ]
+        
+        return {"results": formatted_results}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"数据库错误：{str(e)}")
 
 @app.post("/startscan")
 def start_scan(scan_options: ScanOptions):
@@ -179,13 +213,43 @@ def scan_delete(id: str = Path(..., description="Scan ID")):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/scanhistory/{id}")
-def scan_history(id: str = Path(..., description="Scan ID")):
-    """Get historical data for a scan."""
+def scan_history(id: str = Path(..., description="扫描ID")):
+    """获取扫描的历史数据。"""
     try:
         dbh = get_db()
-        return dbh.scanResultHistory(id)
+        raw_history = dbh.scanResultHistory(id)
+        
+        # 获取扫描开始时间
+        scan_info = dbh.scanInstanceGet(id)
+        if not scan_info:
+            raise ValueError("无法获取扫描信息")
+        scan_start_time = datetime.fromtimestamp(scan_info[3])  # 假设 scanInstanceGet 返回的第四个元素是开始时间
+        
+        def format_relative_timestamp(ts, start_time):
+            try:
+                hour, minute, day = ts.split()
+                hour, minute = map(int, hour.split(':'))
+                day = int(day)
+                
+                # 计算相对时间
+                relative_time = start_time + timedelta(days=day, hours=hour, minutes=minute)
+                return relative_time.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return str(ts)
+        
+        # 转换原始数据为更有意义的格式，并显示完整的时间戳
+        formatted_history = [
+            {
+                "timestamp": format_relative_timestamp(item[0], scan_start_time),
+                "event_type": item[1],
+                "count": item[2]
+            }
+            for item in raw_history
+        ]
+        
+        return {"history": formatted_history}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"数据库错误：{str(e)}")
 
 @app.get("/search/{id}")
 def search(
@@ -235,16 +299,28 @@ def scan_opts(id: str = Body(..., embed=True)):
 
 @app.get("/scaneventresultsunique/{id}")
 def scan_event_results_unique(
-    id: str = Path(..., description="Scan ID"),
-    eventType: str = Query(..., description="Event type"),
-    filterfp: bool = Query(False, description="Filter false positives")
+    id: str = Path(..., description="扫描ID"),
+    eventType: str = Query(..., description="事件类型"),
+    filterfp: bool = Query(False, description="过滤误报")
 ):
-    """Get unique scan results for a scan and event type."""
+    """获取扫描的唯一结果，按事件类型筛选。"""
     try:
         dbh = get_db()
-        return dbh.scanResultEventUnique(id, eventType, filterfp)
+        raw_results = dbh.scanResultEventUnique(id, eventType, filterfp)
+        
+        # 将原始结果转换为结构化的字典列表
+        formatted_results = [
+            {
+                "value": result[0],
+                "type": result[1],
+                "count": result[2]
+            }
+            for result in raw_results
+        ]
+        
+        return {"results": formatted_results}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"数据库错误：{str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
